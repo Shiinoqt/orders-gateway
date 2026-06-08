@@ -1,0 +1,8 @@
+# .dockerignore
+src/
+.git/
+.gitignore
+HELP.md
+.mvn/
+mvnw
+mvnw.cmd
