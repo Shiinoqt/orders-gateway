@@ -17,10 +17,12 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.nio.file.AccessDeniedException;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Validates JWT tokens and forwards authenticated user data as request headers.
+ */
 @Component
 @RequiredArgsConstructor
 public class AuthenticationFilter extends OncePerRequestFilter {
@@ -30,8 +32,7 @@ public class AuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
-        return path.startsWith("/auth/")
-                || path.equals("/actuator/health");
+        return path.equals("/actuator/health");
     }
 
     @Override
@@ -43,41 +44,66 @@ public class AuthenticationFilter extends OncePerRequestFilter {
         String token = parseJwt(request);
 
         if (token == null) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setContentType("application/json");
-            response.getWriter().write("Missing token");
+            unauthorized(response, "Missing token");
+            SecurityContextHolder.clearContext();
             return;
         }
 
         if (!gatewayJwtUtil.isTokenValid(token)) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setContentType("application/json");
-            response.getWriter().write("Invalid token");
+            unauthorized(response, "Invalid token");
+            SecurityContextHolder.clearContext();
             return;
         }
 
         String subject = gatewayJwtUtil.extractSubject(token);
         String username = gatewayJwtUtil.extractUsername(token);
+        String email = gatewayJwtUtil.extractEmail(token);
         List<String> roles = gatewayJwtUtil.extractRoles(token);
 
-        List<SimpleGrantedAuthority> authorities = roles == null ? List.of() :
-                roles.stream()
-                        .map(SimpleGrantedAuthority::new)
-                        .collect(Collectors.toList());
+        if (!StringUtils.hasText(email)) {
+            unauthorized(response, "Token does not contain email claim");
+            SecurityContextHolder.clearContext();
+            return;
+        }
+
+        List<SimpleGrantedAuthority> authorities = roles == null
+                ? List.of()
+                : roles.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toList());
 
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(subject, null, authorities)
         );
 
+        Map<String, String> customHeaders = new HashMap<>();
+        customHeaders.put("Auth-User-Id", subject);
+        customHeaders.put("Auth-Username", username);
+        customHeaders.put("Auth-Email", email);
+        customHeaders.put("Auth-Roles", roles != null ? String.join(",", roles) : "");
+
         HttpServletRequestWrapper wrappedRequest = new HttpServletRequestWrapper(request) {
             @Override
             public String getHeader(String name) {
-                return switch (name) {
-                    case "Auth-User-Id" -> subject;
-                    case "Auth-Username" -> username;
-                    case "Auth-Roles" -> roles != null ? String.join(",", roles) : "";
-                    default -> super.getHeader(name);
-                };
+                String value = customHeaders.get(name);
+                return value != null ? value : super.getHeader(name);
+            }
+
+            @Override
+            public Enumeration<String> getHeaders(String name) {
+                String value = customHeaders.get(name);
+                if (value != null) {
+                    return Collections.enumeration(List.of(value));
+                }
+                return super.getHeaders(name);
+            }
+
+            @Override
+            public Enumeration<String> getHeaderNames() {
+                Set<String> headerNames = new HashSet<>(customHeaders.keySet());
+                Enumeration<String> original = super.getHeaderNames();
+                while (original.hasMoreElements()) {
+                    headerNames.add(original.nextElement());
+                }
+                return Collections.enumeration(headerNames);
             }
         };
 
@@ -90,5 +116,13 @@ public class AuthenticationFilter extends OncePerRequestFilter {
             return header.substring(7);
         }
         return null;
+    }
+
+    private void unauthorized(HttpServletResponse response, String message) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json");
+        response.getWriter().write("""
+            {"error":"unauthorized","message":"%s"}
+            """.formatted(message));
     }
 }

@@ -11,6 +11,11 @@ import javax.crypto.SecretKey;
 import java.util.Date;
 import java.util.List;
 
+/**
+ * Utility for validating and extracting claims from JWT tokens.
+ *
+ * <p>Claims are expected to include: subject, username, email, and roles.</p>
+ */
 @Component
 public class GatewayJwt {
 
@@ -30,6 +35,12 @@ public class GatewayJwt {
                 .getPayload();
     }
 
+    /**
+     * Checks if the token is not expired.
+     *
+     * @param token JWT string
+     * @return true if the token is valid and not expired
+     */
     public boolean isTokenValid(String token) {
         try {
             Claims claims = extractAllClaims(token);
@@ -39,14 +50,42 @@ public class GatewayJwt {
         }
     }
 
+    /**
+     * Extracts the subject (typically user ID) from the token.
+     *
+     * @param token JWT string
+     * @return subject claim
+     */
     public String extractSubject(String token) {
         return extractAllClaims(token).getSubject();
     }
 
+    /**
+     * Extracts the custom username claim from the token.
+     *
+     * @param token JWT string
+     * @return username claim
+     */
     public String extractUsername(String token) {
         return extractAllClaims(token).get("username", String.class);
     }
 
+    /**
+     * Extracts the email claim from the token.
+     *
+     * @param token JWT string
+     * @return email claim, or null if not present
+     */
+    public String extractEmail(String token) {
+        return extractAllClaims(token).get("email", String.class);
+    }
+
+    /**
+     * Extracts the roles claim from the token.
+     *
+     * @param token JWT string
+     * @return list of roles, or null if not present
+     */
     @SuppressWarnings("unchecked")
     public List<String> extractRoles(String token) {
         return extractAllClaims(token).get("roles", List.class);

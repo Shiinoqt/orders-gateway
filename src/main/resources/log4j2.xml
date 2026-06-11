@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN" monitorInterval="30">
+
+    <Appenders>
+        <!-- Dev: human-readable with correlation ID -->
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} [%X{correlationId}] [%X{userId}] - %msg%n"/>
+        </Console>
+
+        <!-- Prod: JSON for ELK/Grafana -->
+        <Console name="JsonConsole" target="SYSTEM_OUT">
+            <JsonLayout compact="true" eventEol="true">
+                <KeyValuePair key="service" value="gateway"/>
+            </JsonLayout>
+        </Console>
+
+        <!-- Request trace log: full request/response body -->
+        <RollingFile name="TraceFile" fileName="logs/gateway-trace.log"
+                     filePattern="logs/gateway-trace-%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout pattern="%d [%t] %-5level %logger{36} [%X{correlationId}] - %msg%n"/>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="100MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="20"/>
+        </RollingFile>
+    </Appenders>
+
+    <Loggers>
+        <!-- Gateway code: VERBOSE DEBUG for request tracing -->
+        <Logger name="com.its.gateway" level="debug" additivity="false">
+            <AppenderRef ref="JsonConsole"/>
+            <AppenderRef ref="TraceFile"/> <!-- full traces only in file -->
+        </Logger>
+
+        <!-- HTTP request/response logging -->
+        <Logger name="com.its.gateway.http" level="trace" additivity="false">
+            <AppenderRef ref="TraceFile"/>
+        </Logger>
+
+        <!-- Suppress third-party noise -->
+        <Logger name="org.springframework" level="info"/>
+        <Logger name="org.hibernate" level="warn"/>
+        <Logger name="io.netty" level="warn"/>
+        <Logger name="com.zaxxer.hikari" level="warn"/>
+
+        <Root level="info">
+            <AppenderRef ref="JsonConsole"/>
+        </Root>
+    </Loggers>
+
+</Configuration>
