@@ -1,30 +1,30 @@
 package com.its.springgateway.config;
 
-import com.its.springgateway.utility.GatewayJwt;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.server.mvc.handler.GatewayRouterFunctions;
 import org.springframework.cloud.gateway.server.mvc.handler.HandlerFunctions;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.function.RouterFunction;
-import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
 
 import java.net.URI;
-import java.util.List;
-import java.util.function.Function;
 
 import static org.springframework.cloud.gateway.server.mvc.filter.BeforeFilterFunctions.uri;
 import static org.springframework.cloud.gateway.server.mvc.predicate.GatewayRequestPredicates.path;
 
+/**
+ * Route configuration for the gateway.
+ * <p>
+ * Auth header injection (Auth-User-Id, Auth-Username, Auth-Email, Auth-Roles) is
+ * handled exclusively by {@link AuthenticationFilter}, which runs earlier in the
+ * servlet filter chain, validates the JWT, and rejects unauthenticated requests.
+ * Routes here must NOT add auth headers again, since ServerRequest.Builder#header
+ * appends rather than replaces, which previously caused duplicated header values
+ * (e.g. Auth-User-Id arriving downstream twice).
+ */
 @Configuration
 public class GatewayConfig {
-
-    private final GatewayJwt gatewayJwt;
-
-    public GatewayConfig(GatewayJwt gatewayJwt) {
-        this.gatewayJwt = gatewayJwt;
-    }
 
     @Value("${orders.uri}")
     private String ordersUri;
@@ -35,36 +35,8 @@ public class GatewayConfig {
     private RouterFunction<ServerResponse> buildRoute(String id, String pathPrefix, String targetUri) {
         return GatewayRouterFunctions.route(id)
                 .route(path(pathPrefix).or(path(pathPrefix + "/**")), HandlerFunctions.http())
-                .before(addAuthHeaders())
                 .before(uri(URI.create(targetUri)))
                 .build();
-    }
-
-    private Function<ServerRequest, ServerRequest> addAuthHeaders() {
-        return request -> {
-            String authHeader = request.headers().firstHeader("Authorization");
-
-            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                return request;
-            }
-
-            String token = authHeader.substring(7);
-
-            if (!gatewayJwt.isTokenValid(token)) {
-                return request;
-            }
-
-            String subject = gatewayJwt.extractSubject(token);
-            String username = gatewayJwt.extractUsername(token);
-            List<String> roles = gatewayJwt.extractRoles(token);
-            String rolesHeader = roles != null ? String.join(",", roles) : "";
-
-            return ServerRequest.from(request)
-                    .header("Auth-User-Id", subject)
-                    .header("Auth-Username", username)
-                    .header("Auth-Roles", rolesHeader)
-                    .build();
-        };
     }
 
     @Bean

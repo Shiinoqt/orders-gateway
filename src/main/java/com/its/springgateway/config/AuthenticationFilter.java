@@ -74,36 +74,42 @@ public class AuthenticationFilter extends OncePerRequestFilter {
                 new UsernamePasswordAuthenticationToken(subject, null, authorities)
         );
 
-        Map<String, String> customHeaders = new HashMap<>();
+        Map<String, String> customHeaders = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         customHeaders.put("Auth-User-Id", subject);
         customHeaders.put("Auth-Username", username);
         customHeaders.put("Auth-Email", email);
         customHeaders.put("Auth-Roles", roles != null ? String.join(",", roles) : "");
 
         HttpServletRequestWrapper wrappedRequest = new HttpServletRequestWrapper(request) {
+
             @Override
             public String getHeader(String name) {
                 String value = customHeaders.get(name);
-                return value != null ? value : super.getHeader(name);
+                if (value != null) return value;
+                if (name.toLowerCase(Locale.ROOT).startsWith("auth-")) return null;
+                return super.getHeader(name);
             }
 
             @Override
             public Enumeration<String> getHeaders(String name) {
                 String value = customHeaders.get(name);
-                if (value != null) {
-                    return Collections.enumeration(List.of(value));
-                }
+                if (value != null) return Collections.enumeration(List.of(value));
+                if (name.toLowerCase(Locale.ROOT).startsWith("auth-")) return Collections.emptyEnumeration();
                 return super.getHeaders(name);
             }
 
             @Override
             public Enumeration<String> getHeaderNames() {
-                Set<String> headerNames = new HashSet<>(customHeaders.keySet());
+                Set<String> names = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+                names.addAll(customHeaders.keySet());
                 Enumeration<String> original = super.getHeaderNames();
                 while (original.hasMoreElements()) {
-                    headerNames.add(original.nextElement());
+                    String name = original.nextElement();
+                    if (!name.toLowerCase(Locale.ROOT).startsWith("auth-")) {
+                        names.add(name);
+                    }
                 }
-                return Collections.enumeration(headerNames);
+                return Collections.enumeration(names);
             }
         };
 
