@@ -101,6 +101,14 @@
             <artifactId>log4j-slf4j2-impl</artifactId>
             <version>2.26.0</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.hibernate</groupId>
+            <artifactId>hibernate-envers</artifactId>
+            <version>7.4.3.Final</version>
+            <type>pom</type>
+            <scope>compile</scope>
+        </dependency>
     </dependencies>
     <dependencyManagement>
         <dependencies>
